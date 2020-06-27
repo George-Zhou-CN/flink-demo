@@ -1,0 +1,33 @@
+target/
+logs/
+.ostrich/*.yaml
+.DS_Store
+**/CATALINA_HOME_IS_UNDEFINED
+CATALINA_HOME_IS_UNDEFINED
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### app
+order-server/dalgen/
+order-server/src/main/resources/mybatis-config.xml
