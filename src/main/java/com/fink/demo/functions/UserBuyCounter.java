@@ -8,7 +8,7 @@ import org.apache.flink.api.common.functions.AggregateFunction;
  * @Date: 2020/6/24 11:39 下午
  * @Desc:
  */
-public class UserBuyCountering implements AggregateFunction<UserBehavior, Long, Long> {
+public class UserBuyCounter implements AggregateFunction<UserBehavior, Long, Long> {
     @Override
     public Long createAccumulator() {
         return 0L;

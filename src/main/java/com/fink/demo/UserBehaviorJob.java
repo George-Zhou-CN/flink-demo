@@ -1,6 +1,6 @@
 package com.fink.demo;
 
-import com.fink.demo.functions.UserBuyCountering;
+import com.fink.demo.functions.UserBuyCounter;
 import com.fink.demo.functions.UserBuyStatisticsCollector;
 import com.fink.demo.model.UserBehavior;
 import com.fink.demo.model.UserBuyCount;
@@ -33,7 +33,6 @@ import java.util.concurrent.TimeUnit;
  **/
 public class UserBehaviorJob {
 
-
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
@@ -56,7 +55,7 @@ public class UserBehaviorJob {
         // 逻辑处理
         DataStream<UserBuyCount> userBuyCountSource = userBehaviorSource
                 .windowAll(TumblingEventTimeWindows.of(Time.hours(1)))
-                .aggregate(new UserBuyCountering(), new UserBuyStatisticsCollector())
+                .aggregate(new UserBuyCounter(), new UserBuyStatisticsCollector())
                 .name("User Buy Count");
 
         userBuyCountSource.print();

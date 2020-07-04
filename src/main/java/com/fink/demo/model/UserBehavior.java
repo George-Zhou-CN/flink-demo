@@ -5,6 +5,7 @@ import com.fink.demo.util.DateUtils;
 import lombok.Data;
 
 import java.util.Date;
+import java.util.Objects;
 
 /**
  * Created by Jiazhi on 2020/6/22.
@@ -37,7 +38,32 @@ public class UserBehavior {
     @JSONField(format = "yyyy-MM-ddTHH:mm:ss")
     private Date ts;
 
+    public UserBehavior(UserBehavior userBehavior) {
+        this.userId = userBehavior.getUserId();
+        this.itemId = userBehavior.getItemId();
+        this.categoryId = userBehavior.getCategoryId();
+        this.behavior = userBehavior.getBehavior();
+        this.ts = userBehavior.getTs();
+    }
+
     public String get10Hour() {
         return DateUtils.getHourAnd10Min(this.ts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UserBehavior that = (UserBehavior) o;
+        return Objects.equals(userId, that.userId) &&
+                Objects.equals(itemId, that.itemId) &&
+                Objects.equals(categoryId, that.categoryId) &&
+                Objects.equals(behavior, that.behavior) &&
+                Objects.equals(ts, that.ts);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(userId, itemId, categoryId, behavior, ts);
     }
 }
