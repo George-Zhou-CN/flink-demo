@@ -3,6 +3,7 @@ package com.fink.demo.model;
 import com.alibaba.fastjson.annotation.JSONField;
 import com.fink.demo.util.DateUtils;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Date;
 import java.util.Objects;
@@ -11,6 +12,7 @@ import java.util.Objects;
  * Created by Jiazhi on 2020/6/22.
  */
 @Data
+@NoArgsConstructor
 public class UserBehavior {
     /**
      * 用户ID

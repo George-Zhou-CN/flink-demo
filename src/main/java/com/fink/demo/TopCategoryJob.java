@@ -2,32 +2,30 @@ package com.fink.demo;
 
 import com.fink.demo.functions.TopCategoryCounter;
 import com.fink.demo.functions.TopCategoryStatisticCollector;
-import com.fink.demo.functions.UvPer10Min;
 import com.fink.demo.io.CategoryAsync;
 import com.fink.demo.model.Category;
 import com.fink.demo.model.RichUserBehavior;
 import com.fink.demo.model.TopCategory;
 import com.fink.demo.model.UserBehavior;
+import com.fink.demo.sink.EsSink;
 import com.fink.demo.source.UserBehaviorSource;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.AsyncDataStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.async.AsyncFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
-import org.apache.flink.streaming.api.windowing.evictors.CountEvictor;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.triggers.CountTrigger;
-import org.apache.flink.streaming.api.windowing.windows.GlobalWindow;
+import org.apache.flink.streaming.connectors.elasticsearch.ElasticsearchSinkFunction;
+import org.apache.flink.streaming.connectors.elasticsearch7.ElasticsearchSink;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
-import org.apache.flink.util.Collector;
+import org.elasticsearch.action.update.UpdateRequest;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -46,12 +44,12 @@ public class TopCategoryJob {
         kafkaConsumer.setStartFromEarliest();
         DataStream<UserBehavior> userBehaviorDataStream = env.addSource(kafkaConsumer).name("User Behavior Source");
 
-        AsyncFunction<UserBehavior, Tuple2<UserBehavior, Category>> function = new CategoryAsync();
         DataStream<Tuple2<UserBehavior, Category>> userBehaviorJoinCategoryDimDataStream = AsyncDataStream
-                .unorderedWait(userBehaviorDataStream, function, 1000, TimeUnit.MILLISECONDS, 20)
+                .unorderedWait(userBehaviorDataStream, new CategoryAsync(), 1000, TimeUnit.MILLISECONDS, 20)
                 .setParallelism(1);
 
         DataStream<RichUserBehavior> richUserBehavior = userBehaviorJoinCategoryDimDataStream
+                .filter(tuple2 -> tuple2.f1 != null)
                 .map((MapFunction<Tuple2<UserBehavior, Category>, RichUserBehavior>) value -> {
                     UserBehavior userBehavior = value.f0;
                     Category category = value.f1;
@@ -61,13 +59,26 @@ public class TopCategoryJob {
         DataStream<TopCategory> topCategoryDataStream = richUserBehavior
                 .filter(userBehavior -> userBehavior.getBehavior().equals("buy"))
                 .keyBy((KeySelector<RichUserBehavior, Long>) userBehavior -> userBehavior.getParentCategoryId())
-                .window(GlobalWindows.create())
-                .trigger(CountTrigger.of(1L))
-                .evictor(CountEvictor.of(0L, true))
+                .window(TumblingProcessingTimeWindows.of(Time.days(1L)))
+                .trigger(CountTrigger.of(10L))
                 .aggregate(new TopCategoryCounter(), new TopCategoryStatisticCollector())
                 .name("Top Category");
-
         topCategoryDataStream.print();
+
+        ElasticsearchSink<TopCategory> esSink = EsSink
+                .buildSink((ElasticsearchSinkFunction<TopCategory>) (topCategory, runtimeContext, requestIndexer) -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("category_id", topCategory.getCategoryId());
+                    row.put("category_name", topCategory.getCategoryName());
+                    row.put("uv", topCategory.getBuyCount());
+
+                    UpdateRequest updateRequest = new UpdateRequest();
+                    updateRequest.index("top_category").id(topCategory.getCategoryId().toString()).upsert(row).doc(row).docAsUpsert(true);
+                    requestIndexer.add(updateRequest);
+                });
+        topCategoryDataStream.addSink(esSink);
+
+        env.execute();
 
     }
 }

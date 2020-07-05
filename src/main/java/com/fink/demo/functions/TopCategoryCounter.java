@@ -18,6 +18,7 @@ public class TopCategoryCounter implements AggregateFunction<RichUserBehavior, T
     @Override
     public TopCategory add(RichUserBehavior value, TopCategory accumulator) {
         if (accumulator.isEmpty()) {
+            accumulator.setCategoryId(value.getParentCategoryId());
             accumulator.setCategoryName(value.getParentCategoryName());
             accumulator.setBuyCount(1L);
             return accumulator;

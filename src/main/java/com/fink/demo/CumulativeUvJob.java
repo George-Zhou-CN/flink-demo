@@ -2,6 +2,7 @@ package com.fink.demo;
 
 import com.fink.demo.functions.UvPer10Min;
 import com.fink.demo.model.UserBehavior;
+import com.fink.demo.sink.EsSink;
 import com.fink.demo.source.UserBehaviorSource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.functions.RuntimeContext;
@@ -123,32 +124,18 @@ public class CumulativeUvJob {
                     }
                 });
 
-//        result.print();
+        cumulativeUvDateStream.print();
 
         // 写入ES
-        List<HttpHost> httpHosts = new ArrayList<>();
-        httpHosts.add(new HttpHost("localhost", 9200, "http"));
-        ElasticsearchSink.Builder<UvPer10Min> esSinkBuilder = new ElasticsearchSink.Builder<>(httpHosts,
-                new ElasticsearchSinkFunction<UvPer10Min>() {
-                    public IndexRequest createIndexRequest(UvPer10Min uvPer10Min) {
-                        Map<String, Object> row = new HashMap<>();
-                        row.put("time_str", uvPer10Min.getTime());
-                        row.put("uv", uvPer10Min.getUv());
+        ElasticsearchSink<UvPer10Min> esSink = EsSink
+                .buildSink((ElasticsearchSinkFunction<UvPer10Min>) (uvPer10Min, runtimeContext, requestIndexer) -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("time_str", uvPer10Min.getTime());
+                    row.put("uv", uvPer10Min.getUv());
 
-                        return Requests.indexRequest()
-                                .index("cumulative_uv")
-                                .source(row);
-                    }
-
-                    @Override
-                    public void process(UvPer10Min uvPer10Min, RuntimeContext runtimeContext, RequestIndexer requestIndexer) {
-                        requestIndexer.add(createIndexRequest(uvPer10Min));
-                    }
-                }
-        );
-        // 关闭ES写入缓存
-        esSinkBuilder.setBulkFlushMaxActions(1);
-        cumulativeUvDateStream.addSink(esSinkBuilder.build());
+                    requestIndexer.add(Requests.indexRequest().index("cumulative_uv").source(row));
+                });
+        cumulativeUvDateStream.addSink(esSink);
 
         env.execute("Cumulative UV");
     }

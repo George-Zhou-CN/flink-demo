@@ -4,6 +4,7 @@ import com.fink.demo.functions.UserBuyCounter;
 import com.fink.demo.functions.UserBuyStatisticsCollector;
 import com.fink.demo.model.UserBehavior;
 import com.fink.demo.model.UserBuyCount;
+import com.fink.demo.sink.EsSink;
 import com.fink.demo.source.UserBehaviorSource;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -61,29 +62,16 @@ public class UserBehaviorJob {
         userBuyCountSource.print();
 
         // 写入ES
-        List<HttpHost> httpHosts = new ArrayList<>();
-        httpHosts.add(new HttpHost("localhost", 9200, "http"));
-        ElasticsearchSink.Builder<UserBuyCount> esSinkBuilder = new ElasticsearchSink.Builder<>(httpHosts,
-                new ElasticsearchSinkFunction<UserBuyCount>() {
-                    public IndexRequest createIndexRequest(UserBuyCount userBuyCount) {
-                        Map<String, Object> row = new HashMap<>();
-                        row.put("hour", userBuyCount.getHour());
-                        row.put("count", userBuyCount.getCount());
+        ElasticsearchSink<UserBuyCount> esSink = EsSink
+                .buildSink((ElasticsearchSinkFunction<UserBuyCount>) (userBuyCount, runtimeContext, requestIndexer) -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("hour", userBuyCount.getHour());
+                    row.put("count", userBuyCount.getCount());
 
-                        return Requests.indexRequest()
-                                .index("buy_cnt_per_hour")
-                                .source(row);
-                    }
-
-                    @Override
-                    public void process(UserBuyCount userBuyCount, RuntimeContext runtimeContext, RequestIndexer requestIndexer) {
-                        requestIndexer.add(createIndexRequest(userBuyCount));
-                    }
-                }
-        );
-        // 关闭ES写入缓存
-        esSinkBuilder.setBulkFlushMaxActions(1);
-        userBuyCountSource.addSink(esSinkBuilder.build());
+                    IndexRequest indexRequest = Requests.indexRequest().index("buy_cnt_per_hour").source(row);
+                    requestIndexer.add(indexRequest);
+                });
+        userBuyCountSource.addSink(esSink);
 
         // 提交任务
         env.execute("UserBehavior");

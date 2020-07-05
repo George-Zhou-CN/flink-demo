@@ -13,7 +13,7 @@ import java.util.Map;
  **/
 public class MysqlOperator {
     private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/flink";
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/flink?useSSL=false";
     private static final String USER_NAME = "root";
     private static final String PASSWORD = "123456";
 
@@ -31,13 +31,13 @@ public class MysqlOperator {
             while (rs.next()) {
                 ResultSetMetaData meta = rs.getMetaData();
                 int colCount = meta.getColumnCount();
+                Map<String, Object> row = new HashMap<>();
                 for (int i = 1; i <= colCount; i++) {
-                    Map<String, Object> row = new HashMap<>();
                     String colName = meta.getColumnName(i);
                     Object value = rs.getObject(i);
                     row.put(colName, value);
-                    rows.add(row);
                 }
+                rows.add(row);
             }
 
             return rows;

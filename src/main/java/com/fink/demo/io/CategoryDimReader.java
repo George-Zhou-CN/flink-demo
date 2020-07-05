@@ -18,10 +18,17 @@ public class CategoryDimReader {
             return null;
         }
 
-        Map<String, Object> row = rows.get(0);
         Category category = new Category();
-        category.setSubCategoryId((Long) row.get("sub_category_id"));
-        category.setParentCategoryId((Long) row.get("parent_category_id"));
+        Map<String, Object> row = rows.get(0);
+        for (Map.Entry<String, Object> column : row.entrySet()) {
+            switch (column.getKey()) {
+                case "sub_category_id":
+                    category.setSubCategoryId((Long) row.get("sub_category_id"));
+                    continue;
+                case "parent_category_id":
+                    category.setParentCategoryId((Long) row.get("parent_category_id"));
+            }
+        }
         return category;
     }
 }

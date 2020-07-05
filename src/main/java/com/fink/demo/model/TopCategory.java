@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TopCategory {
 
+    private Long categoryId;
+
     private String categoryName;
 
     private Long buyCount;
@@ -27,11 +29,11 @@ public class TopCategory {
     }
 
     public Boolean isEmpty() {
-        return categoryName == null && buyCount == null;
+        return categoryId == null && categoryName == null && buyCount == null;
     }
 
     public TopCategory merge(TopCategory otherTopCategory) {
-        return new TopCategory(this.categoryName,
+        return new TopCategory(this.categoryId, this.categoryName,
                 otherTopCategory.getBuyCount() + otherTopCategory.getBuyCount());
     }
 }
