@@ -11,7 +11,7 @@ import java.util.List;
  * @Auhtor Jiazhi
  * @Date 2020/7/5 12:43 下午
  **/
-public class EsSink {
+public class ElasticSearchSink {
     private final static String HOST = "localhost";
     private final static Integer PORT = 9200;
     private final static String SCHEMA = "http";

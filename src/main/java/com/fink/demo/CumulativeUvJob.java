@@ -2,10 +2,9 @@ package com.fink.demo;
 
 import com.fink.demo.functions.UvPer10Min;
 import com.fink.demo.model.UserBehavior;
-import com.fink.demo.sink.EsSink;
+import com.fink.demo.sink.ElasticSearchSink;
 import com.fink.demo.source.UserBehaviorSource;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
@@ -23,12 +22,9 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.triggers.CountTrigger;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.elasticsearch.ElasticsearchSinkFunction;
-import org.apache.flink.streaming.connectors.elasticsearch.RequestIndexer;
 import org.apache.flink.streaming.connectors.elasticsearch7.ElasticsearchSink;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.util.Collector;
-import org.apache.http.HttpHost;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.Requests;
 
 import java.util.*;
@@ -127,7 +123,7 @@ public class CumulativeUvJob {
         cumulativeUvDateStream.print();
 
         // 写入ES
-        ElasticsearchSink<UvPer10Min> esSink = EsSink
+        ElasticsearchSink<UvPer10Min> esSink = ElasticSearchSink
                 .buildSink((ElasticsearchSinkFunction<UvPer10Min>) (uvPer10Min, runtimeContext, requestIndexer) -> {
                     Map<String, Object> row = new HashMap<>();
                     row.put("time_str", uvPer10Min.getTime());

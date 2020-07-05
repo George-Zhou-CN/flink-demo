@@ -7,7 +7,7 @@ import com.fink.demo.model.Category;
 import com.fink.demo.model.RichUserBehavior;
 import com.fink.demo.model.TopCategory;
 import com.fink.demo.model.UserBehavior;
-import com.fink.demo.sink.EsSink;
+import com.fink.demo.sink.ElasticSearchSink;
 import com.fink.demo.source.UserBehaviorSource;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -65,7 +65,7 @@ public class TopCategoryJob {
                 .name("Top Category");
         topCategoryDataStream.print();
 
-        ElasticsearchSink<TopCategory> esSink = EsSink
+        ElasticsearchSink<TopCategory> esSink = ElasticSearchSink
                 .buildSink((ElasticsearchSinkFunction<TopCategory>) (topCategory, runtimeContext, requestIndexer) -> {
                     Map<String, Object> row = new HashMap<>();
                     row.put("category_id", topCategory.getCategoryId());
