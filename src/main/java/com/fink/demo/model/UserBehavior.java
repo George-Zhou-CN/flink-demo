@@ -1,7 +1,6 @@
 package com.fink.demo.model;
 
 import com.alibaba.fastjson.annotation.JSONField;
-import com.fink.demo.util.DateUtils;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -46,10 +45,6 @@ public class UserBehavior {
         this.categoryId = userBehavior.getCategoryId();
         this.behavior = userBehavior.getBehavior();
         this.ts = userBehavior.getTs();
-    }
-
-    public String get10Hour() {
-        return DateUtils.getHourAnd10Min(this.ts);
     }
 
     @Override

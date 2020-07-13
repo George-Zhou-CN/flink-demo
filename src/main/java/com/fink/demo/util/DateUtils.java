@@ -21,8 +21,8 @@ public class DateUtils {
         return Integer.valueOf(new SimpleDateFormat("HH").format(new Date(time)));
     }
 
-    public static String getHourAnd10Min(Date date) {
-        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
-        return sdf.format(date).substring(0, 4) + "0";
+    public static String getDateAndHourAnd10Min(Date date) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+        return sdf.format(date).substring(0, 15) + "0";
     }
 }

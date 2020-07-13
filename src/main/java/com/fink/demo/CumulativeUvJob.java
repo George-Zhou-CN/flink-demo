@@ -4,6 +4,7 @@ import com.fink.demo.functions.UvPer10Min;
 import com.fink.demo.model.UserBehavior;
 import com.fink.demo.sink.ElasticSearchSink;
 import com.fink.demo.source.UserBehaviorSource;
+import com.fink.demo.util.DateUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
@@ -17,9 +18,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
-import org.apache.flink.streaming.api.windowing.evictors.CountEvictor;
 import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.triggers.CountTrigger;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.elasticsearch.ElasticsearchSinkFunction;
 import org.apache.flink.streaming.connectors.elasticsearch7.ElasticsearchSink;
@@ -27,7 +26,9 @@ import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.util.Collector;
 import org.elasticsearch.client.Requests;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * @Auhtor Jiazhi
@@ -49,10 +50,9 @@ public class CumulativeUvJob {
                 .name("User Behavior Source");
 
         // 业务逻辑处理
+        // todo 0点要清除状态
         DataStream<UvPer10Min> uvPer10MinDataStream = userBehaviorSource
-                .windowAll(TumblingProcessingTimeWindows.of(Time.days(1L)))
-                .trigger(CountTrigger.of(1L))
-                .evictor(CountEvictor.of(0L, true))
+                .windowAll(TumblingProcessingTimeWindows.of(Time.seconds(10)))
                 .process(new ProcessAllWindowFunction<UserBehavior, UvPer10Min, TimeWindow>() {
                     private transient MapState<String, String> userIdState;
                     private transient ValueState<Long> uvCountState;
@@ -80,17 +80,16 @@ public class CumulativeUvJob {
                                 curUvCount++;
                             }
 
-                            out.collect(new UvPer10Min(userBehavior.get10Hour(), uvCount + curUvCount));
+                            out.collect(new UvPer10Min(userBehavior.getTs(), null, uvCount + curUvCount));
                         }
 
                         this.uvCountState.update(uvCount + curUvCount);
                     }
                 });
-
-        // appStatisticsSource.print();
+        // uvPer10MinDataStream.print();
 
         DataStream<UvPer10Min> cumulativeUvDateStream = uvPer10MinDataStream
-                .keyBy((KeySelector<UvPer10Min, String>) uvPer10Min -> uvPer10Min.getTime())
+                .keyBy((KeySelector<UvPer10Min, String>) uvPer10Min -> DateUtils.getDateAndHourAnd10Min(uvPer10Min.getTime()))
                 .window(TumblingProcessingTimeWindows.of(Time.seconds(10L)))
                 .process(new ProcessWindowFunction<UvPer10Min, UvPer10Min, String, TimeWindow>() {
                     private transient ValueState<Long> maxUvState;
@@ -116,7 +115,7 @@ public class CumulativeUvJob {
                         }
 
                         this.maxUvState.update(maxUv);
-                        out.collect(new UvPer10Min(key, maxUv));
+                        out.collect(new UvPer10Min(null, key, maxUv));
                     }
                 });
 
@@ -126,7 +125,7 @@ public class CumulativeUvJob {
         ElasticsearchSink<UvPer10Min> esSink = ElasticSearchSink
                 .buildSink((ElasticsearchSinkFunction<UvPer10Min>) (uvPer10Min, runtimeContext, requestIndexer) -> {
                     Map<String, Object> row = new HashMap<>();
-                    row.put("time_str", uvPer10Min.getTime());
+                    row.put("time_str", uvPer10Min.getKey());
                     row.put("uv", uvPer10Min.getUv());
 
                     requestIndexer.add(Requests.indexRequest().index("cumulative_uv").source(row));
