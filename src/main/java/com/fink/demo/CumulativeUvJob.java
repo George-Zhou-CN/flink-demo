@@ -50,7 +50,8 @@ public class CumulativeUvJob {
                 .name("User Behavior Source");
 
         // 业务逻辑处理
-        // todo 0点要清除状态
+        // todo 0点要清除状态，使用GlobalWindow+自定义trigger去实现窗口时间到了fire或者purge状态
+        // todo 需要先去了解trigger怎么实现的
         DataStream<UvPer10Min> uvPer10MinDataStream = userBehaviorSource
                 .windowAll(TumblingProcessingTimeWindows.of(Time.seconds(10)))
                 .process(new ProcessAllWindowFunction<UserBehavior, UvPer10Min, TimeWindow>() {

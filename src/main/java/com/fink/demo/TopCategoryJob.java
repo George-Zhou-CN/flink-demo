@@ -57,7 +57,7 @@ public class TopCategoryJob {
                     return new RichUserBehavior(userBehavior, category);
                 });
 
-        // todo 每来一条输出1条，需要解决, 状态清零需要解决
+        // todo 每来一条输出1条，对下游并发太高，需要解决, 状态清零使用onTime解决
         DataStream<TopCategory> topCategoryDataStream = richUserBehavior
                 .filter(userBehavior -> userBehavior.getBehavior().equals("buy"))
                 .keyBy((KeySelector<RichUserBehavior, Long>) userBehavior -> userBehavior.getParentCategoryId())
