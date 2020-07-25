@@ -6,16 +6,12 @@ import com.fink.demo.sink.ElasticSearchSink;
 import com.fink.demo.source.UserBehaviorSource;
 import com.fink.demo.util.DateUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.flink.api.common.state.MapState;
-import org.apache.flink.api.common.state.MapStateDescriptor;
-import org.apache.flink.api.common.state.ValueState;
-import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.state.*;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -50,11 +46,12 @@ public class CumulativeUvJob {
                 .name("User Behavior Source");
 
         // 业务逻辑处理
-        // todo 0点要清除状态，使用GlobalWindow+自定义trigger去实现窗口时间到了fire或者purge状态
-        // todo 需要先去了解trigger怎么实现的
+        // 按照天分组，状态在1个小时候之后没有写入就自动清除
         DataStream<UvPer10Min> uvPer10MinDataStream = userBehaviorSource
-                .windowAll(TumblingProcessingTimeWindows.of(Time.seconds(10)))
-                .process(new ProcessAllWindowFunction<UserBehavior, UvPer10Min, TimeWindow>() {
+                .keyBy(userBehavior -> DateUtils.format(userBehavior.getTs(), "yyyy-MM-dd"))
+                .window(TumblingProcessingTimeWindows.of(Time.seconds(10)))
+                .process(new ProcessWindowFunction<UserBehavior, UvPer10Min, String, TimeWindow>() {
+
                     private transient MapState<String, String> userIdState;
                     private transient ValueState<Long> uvCountState;
 
@@ -62,14 +59,26 @@ public class CumulativeUvJob {
                     public void open(Configuration parameters) throws Exception {
                         super.open(parameters);
 
-                        MapStateDescriptor<String, String> userIdDescriptor = new MapStateDescriptor<>("userId", String.class, String.class);
+                        StateTtlConfig userIdTtlConf = StateTtlConfig
+                                .newBuilder(org.apache.flink.api.common.time.Time.hours(1))
+                                .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
+                                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                                .build();
+                        StateTtlConfig uvTtlConf = StateTtlConfig
+                                .newBuilder(org.apache.flink.api.common.time.Time.hours(1))
+                                .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
+                                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                                .build();
                         ValueStateDescriptor<Long> uvDescriptor = new ValueStateDescriptor("uv", Long.class);
+                        MapStateDescriptor<String, String> userIdDescriptor = new MapStateDescriptor<>("userId", String.class, String.class);
+                        userIdDescriptor.enableTimeToLive(userIdTtlConf);
+                        uvDescriptor.enableTimeToLive(uvTtlConf);
                         this.userIdState = getRuntimeContext().getMapState(userIdDescriptor);
                         this.uvCountState = getRuntimeContext().getState(uvDescriptor);
                     }
 
                     @Override
-                    public void process(Context context, Iterable<UserBehavior> elements, Collector<UvPer10Min> out) throws Exception {
+                    public void process(String s, Context context, Iterable<UserBehavior> elements, Collector<UvPer10Min> out) throws Exception {
                         Long uvCount = this.uvCountState.value() == null ? 0L : this.uvCountState.value();
                         Long curUvCount = 0L;
                         Iterator<UserBehavior> iterator = elements.iterator();
@@ -87,7 +96,7 @@ public class CumulativeUvJob {
                         this.uvCountState.update(uvCount + curUvCount);
                     }
                 });
-        // uvPer10MinDataStream.print();
+//        uvPer10MinDataStream.print();
 
         DataStream<UvPer10Min> cumulativeUvDateStream = uvPer10MinDataStream
                 .keyBy((KeySelector<UvPer10Min, String>) uvPer10Min -> DateUtils.getDateAndHourAnd10Min(uvPer10Min.getTime()))
