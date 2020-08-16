@@ -6,8 +6,6 @@ import com.fink.demo.sink.ElasticSearchSink;
 import com.fink.demo.source.UserBehaviorSource;
 import com.fink.demo.util.DateUtils;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.state.ReducingState;
-import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.java.functions.KeySelector;
