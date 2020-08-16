@@ -1,15 +1,15 @@
 package com.fink.demo;
 
 import com.fink.demo.io.CategoryAsync;
-import com.fink.demo.model.Category;
-import com.fink.demo.model.RichUserBehavior;
-import com.fink.demo.model.TopCategory;
-import com.fink.demo.model.UserBehavior;
+import com.fink.demo.model.*;
 import com.fink.demo.sink.ElasticSearchSink;
 import com.fink.demo.source.UserBehaviorSource;
+import com.fink.demo.util.DateUtils;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.state.ReducingState;
 import org.apache.flink.api.common.state.ReducingStateDescriptor;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
@@ -24,6 +24,9 @@ import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.util.Collector;
 import org.elasticsearch.action.update.UpdateRequest;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -44,12 +47,12 @@ public class TopCategoryJob {
         kafkaConsumer.setStartFromEarliest();
         DataStream<UserBehavior> userBehaviorDataStream = env.addSource(kafkaConsumer).name("User Behavior Source");
 
-        // todo 超时问题要解决
-        DataStream<Tuple2<UserBehavior, Category>> userBehaviorJoinCategoryDimDataStream = AsyncDataStream
-                .unorderedWait(userBehaviorDataStream, new CategoryAsync(), 1000, TimeUnit.MILLISECONDS, 20)
+        // 通过加长超时时间和减少并发量来解决超时问题
+        DataStream<Tuple2<UserBehavior, Category>> userBehaviorJoinCategoryDataStream = AsyncDataStream
+                .unorderedWait(userBehaviorDataStream, new CategoryAsync(), 2000, TimeUnit.MILLISECONDS, 10)
                 .setParallelism(1);
 
-        DataStream<RichUserBehavior> richUserBehavior = userBehaviorJoinCategoryDimDataStream
+        DataStream<RichUserBehavior> richUserBehavior = userBehaviorJoinCategoryDataStream
                 .filter(tuple2 -> tuple2.f1 != null)
                 .map((MapFunction<Tuple2<UserBehavior, Category>, RichUserBehavior>) value -> {
                     UserBehavior userBehavior = value.f0;
@@ -57,25 +60,48 @@ public class TopCategoryJob {
                     return new RichUserBehavior(userBehavior, category);
                 });
 
-        // todo 每来一条输出1条，对下游并发太高，需要解决, 状态清零使用onTime解决
+        // 利用onTime方法解决写入下游es的压力，并在当晚23:59:59点清除状态
         DataStream<TopCategory> topCategoryDataStream = richUserBehavior
                 .filter(userBehavior -> userBehavior.getBehavior().equals("buy"))
                 .keyBy((KeySelector<RichUserBehavior, Long>) userBehavior -> userBehavior.getParentCategoryId())
                 .process(new KeyedProcessFunction<Long, RichUserBehavior, TopCategory>() {
-                    private transient ReducingState<Long> counter;
+                    private ValueState<CountWithTimestamp> countWithTimestampState;
 
                     @Override
                     public void open(Configuration parameters) throws Exception {
                         super.open(parameters);
 
-                        ReducingStateDescriptor<Long> descriptor = new ReducingStateDescriptor<>("counter", (a, b) -> a + b, Long.class);
-                        this.counter = getRuntimeContext().getReducingState(descriptor);
+                        countWithTimestampState = getRuntimeContext()
+                                .getState(new ValueStateDescriptor<>("countWithTimestampState", CountWithTimestamp.class));
                     }
 
                     @Override
                     public void processElement(RichUserBehavior value, Context ctx, Collector<TopCategory> out) throws Exception {
-                        this.counter.add(1L);
-                        out.collect(new TopCategory(value.getParentCategoryId(), value.getParentCategoryName(), this.counter.get()));
+                        CountWithTimestamp current = countWithTimestampState.value();
+                        if (current == null) {
+                            current = new CountWithTimestamp(String.valueOf(value.getParentCategoryId()), value.getParentCategoryName());
+                        }
+
+                        // todo 在使用processingTime作为时间特征时，ctx.timestamp()为null，需要解决
+//                        long time = ctx.timestamp();
+                        long triggerTime = DateUtils.jumpSeconds(System.currentTimeMillis());
+                        current.increase();
+                        current.setLastModified(triggerTime);
+                        countWithTimestampState.update(current);
+
+                        ctx.timerService().registerProcessingTimeTimer(triggerTime);
+                    }
+
+                    @Override
+                    public void onTimer(long timestamp, OnTimerContext ctx, Collector<TopCategory> out) throws Exception {
+                        CountWithTimestamp countWithTimestamp = countWithTimestampState.value();
+                        out.collect(new TopCategory(Long.valueOf(countWithTimestamp.getKey()), countWithTimestamp.getName(), countWithTimestamp.getCount()));
+
+                        // 如果等于每天的23:59:59，清除状态
+                        LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochSecond(timestamp / 1000), ZoneId.systemDefault());
+                        if (ldt.getHour() == 23 && ldt.getMinute() == 59 && ldt.getSecond() == 59) {
+                            countWithTimestampState.clear();
+                        }
                     }
                 })
                 .name("Top Category");
@@ -95,6 +121,5 @@ public class TopCategoryJob {
         topCategoryDataStream.addSink(esSink);
 
         env.execute();
-
     }
 }

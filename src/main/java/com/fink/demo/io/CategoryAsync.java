@@ -52,4 +52,9 @@ public class CategoryAsync extends RichAsyncFunction<UserBehavior, Tuple2<UserBe
         super.close();
         ExecutorUtils.gracefulShutdown(20000, TimeUnit.MILLISECONDS, executorService);
     }
+
+    @Override
+    public void timeout(UserBehavior input, ResultFuture<Tuple2<UserBehavior, Category>> resultFuture) throws Exception {
+        System.out.println("Async function call has timed out. UserBehavior: " + input.toString());
+    }
 }
