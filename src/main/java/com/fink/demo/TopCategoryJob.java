@@ -80,9 +80,8 @@ public class TopCategoryJob {
                             current = new CountWithTimestamp(String.valueOf(value.getParentCategoryId()), value.getParentCategoryName());
                         }
 
-                        // todo 在使用processingTime作为时间特征时，ctx.timestamp()为null，需要解决
-//                        long time = ctx.timestamp();
-                        long triggerTime = DateUtils.jumpSeconds(System.currentTimeMillis());
+                        long time = ctx.timerService().currentProcessingTime();
+                        long triggerTime = DateUtils.jumpSeconds(time);
                         current.increase();
                         current.setLastModified(triggerTime);
                         countWithTimestampState.update(current);
