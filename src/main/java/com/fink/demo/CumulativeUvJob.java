@@ -32,7 +32,12 @@ import java.util.Map;
  * Desc: 统计一天每10分钟用户的累计用户数
  **/
 public class CumulativeUvJob {
-
+    /**
+     * 任务主入口
+     *
+     * @param args
+     * @throws Exception
+     */
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
